@@ -79,10 +79,9 @@ object UnexpectedSequenceWriter:
       maxMapSize: Int
   ): (Map[String, Map[String, Int]], Vector[String]) =
     val rowColBarcodeCounts = new mutable.HashMap[String, mutable.Map[String, Int]]()
-    val allRowBarcodeCounts = new mutable.HashMap[String, Int]()
 
     // create & populate the list of readers
-    val readers = mutable.Queue[CachedBarcodes]()
+    val readers: mutable.Queue[CachedBarcodes] = mutable.Queue()
     try
       colReference.allBarcodes.foreach { colBc =>
         val file = cacheDir.resolve(nameFor(colBc))
@@ -100,24 +99,15 @@ object UnexpectedSequenceWriter:
           case None => Some(1)
           case Some(c) => Some(c + 1)
         }
-        val _ = allRowBarcodeCounts.updateWith(rowBc) {
-          case None => Some(1)
-          case Some(c) => Some(c + 1)
-        }
       end while
       // at this point, we either exhausted the readers or we filled the map; go through the remaining data
       // and tally things up, but don't add new keys to the outer map
       readers.foreach { rdr =>
-        val colBc = rdr.colBc
         rdr.foreach { rowBc =>
           // now, we only update if there was an existing entry in `rowColBarcodeCounts` because it means it's
           // in the set of things we're keeping track of
           rowColBarcodeCounts.get(rowBc).foreach { colBarcodeMap =>
-            val _ = colBarcodeMap.updateWith(colBc) {
-              case None => Some(1)
-              case Some(c) => Some(c + 1)
-            }
-            val _ = allRowBarcodeCounts.updateWith(rowBc) {
+            val _ = colBarcodeMap.updateWith(rdr.colBc) {
               case None => Some(1)
               case Some(c) => Some(c + 1)
             }
@@ -127,7 +117,18 @@ object UnexpectedSequenceWriter:
       }
 
       // find the most popular N row barcodes
-      val mostCommonRowBarcodesRanked = allRowBarcodeCounts.toVector.sortBy(-_._2).take(nSequencesToReport).map(_._1)
+      val stringOrd: Ordering[String] = Ordering[String]
+      val mostCommonRowBarcodesRanked =
+        // make an ordering that prioritizes high numbers and lexicographically earlier barcodes
+        given Ordering[String] = stringOrd.reverse
+        topNBy(
+          rowColBarcodeCounts,
+          nSequencesToReport,
+          (rowBc, perColCounts) => (perColCounts.values.sum, rowBc),
+          Ordering[(Int, String)]
+        ).map(_._2)
+      end mostCommonRowBarcodesRanked
+
       val mostCommonRowBarcodes = mostCommonRowBarcodesRanked.toSet
 
       // filter out everything else and convert to an immutable map
@@ -144,6 +145,20 @@ object UnexpectedSequenceWriter:
     end try
 
   end loadCache
+
+  private[reports] def topNBy[A, B](xs: Iterable[A], n: Int, f: A => B, ord: Ordering[B]): Vector[B] =
+    given Ordering[B] = ord.reverse
+    val pq: mutable.PriorityQueue[B] = new mutable.PriorityQueue
+    xs.foreach { x =>
+      pq.addOne(f(x))
+      if pq.size > n then
+        val _ = pq.dequeue()
+    }
+    val ret: Vector[B] = pq.toVector
+    assert(ret.size <= n)
+    ret.reverse
+
+  end topNBy
 
   private[reports] def printUnexpectedCounts(
       colReference: Reference,
