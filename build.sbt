@@ -19,7 +19,7 @@ lazy val versions = new {
   val fastutil = "8.5.18"
   val fs2 = "3.12.2"
   val log4s = "1.10.0"
-  val logback = "1.2.13"
+  val logback = "1.5.21"
   val munit = "1.2.1"
   val munitCatsEffect3 = "2.1.0"
   val munitScalaCheck = "1.2.0"
@@ -29,7 +29,7 @@ lazy val versions = new {
   val scalaTest = "3.2.19"
   val scalaTestPlusScalaCheck = "3.2.18.0"
   val scopt = "4.1.0"
-  val slf4j = "1.7.36"
+  val slf4j = "2.0.17"
 }
 
 lazy val libraries = new {
