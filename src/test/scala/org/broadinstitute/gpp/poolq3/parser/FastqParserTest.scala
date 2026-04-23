@@ -5,13 +5,14 @@
  */
 package org.broadinstitute.gpp.poolq3.parser
 
+import scala.util.Using
+
 import better.files.*
-import org.scalatest.flatspec.AnyFlatSpec
-import org.scalatest.matchers.should.Matchers.*
+import munit.FunSuite
 
-class FastqParserTest extends AnyFlatSpec:
+class FastqParserTest extends FunSuite:
 
-  "FastqParser" should "reject a malformed FASTQ file" in {
+  test("FastqParser should reject a malformed FASTQ file") {
     val data =
       """@HWUSI-EAS100R:6:23:398:3989#1
         |AACTCACG
@@ -24,14 +25,13 @@ class FastqParserTest extends AnyFlatSpec:
     val file: File = File.newTemporaryFile("FastqParserTest", ".fastq")
     try
       file.overwrite(data)
-      val fqp = new FastqParser(file.path)
       intercept[InvalidFileException] {
-        fqp.toList
+        Using.resource(new FastqParser(file.path).iterator)(iter => iter.toList)
       }
     finally file.delete()
   }
 
-  "FastqParser" should "reject a misaligned FASTQ file" in {
+  test("FastqParser should reject a misaligned FASTQ file") {
     val data =
       """+
         |4<<8-767
@@ -42,14 +42,13 @@ class FastqParserTest extends AnyFlatSpec:
     val file: File = File.newTemporaryFile("FastqParserTest", ".fastq")
     try
       file.overwrite(data)
-      val fqp = new FastqParser(file.path)
       intercept[InvalidFileException] {
-        fqp.toList
+        Using.resource(new FastqParser(file.path).iterator)(iter => iter.toList)
       }
     finally file.delete()
   }
 
-  it should "parse complete records" in {
+  test("should parse complete records") {
     val data =
       """@HWUSI-EAS100R:6:23:398:3989#1
         |AACTCACG
@@ -62,10 +61,18 @@ class FastqParserTest extends AnyFlatSpec:
     val file: File = File.newTemporaryFile("FastqParserTest", ".fastq")
     try
       file.overwrite(data)
-      val fqp = new FastqParser(file.path)
-      val fqi = fqp.iterator
-      val _ = (fqi.toList should have).length(2)
-      fqi.close()
+      Using.resource(new FastqParser(file.path).iterator)(iter => assertEquals(iter.toList.length, 2))
+    finally file.delete()
+  }
+
+  test("should reject a file ending with only 1 line") {
+    val data = "@HWUSI-EAS100R:6:23:398:3989#1"
+    val file: File = File.newTemporaryFile("FastqParserTest", ".fastq")
+    try
+      file.overwrite(data)
+      intercept[InvalidFileException] {
+        Using.resource(new FastqParser(file.path).iterator)(iter => iter.toList)
+      }
     finally file.delete()
   }
 
